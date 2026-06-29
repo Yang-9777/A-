@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股涨停排行榜 PRO · 机构版</title>
+<script src="https://cdn.bootcdn.net/ajax/libs/vue/3.4.0/vue.global.prod.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--border:#334155;--up:#ff4d4f;--down:#00c853;--gold:#fbbf24;--blue:#38bdf8;--muted:#64748b;--text:#e2e8f0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh}
+#app{display:flex;flex-direction:column;height:100vh}
+/* Toolbar */
+.toolbar{background:var(--card);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;z-index:10}
+.toolbar .logo{font-size:18px;font-weight:bold;color:var(--gold);white-space:nowrap}
+.toolbar input[type=text]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:13px;width:180px}
+.toolbar input[type=text]::placeholder{color:var(--muted)}
+.toolbar select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;cursor:pointer}
+.toolbar button{background:var(--gold);color:var(--bg);border:none;padding:6px 14px;border-radius:6px;font-weight:bold;cursor:pointer;font-size:13px;transition:.2s}
+.toolbar button:hover{opacity:.85}
+.toolbar .muted-btn{background:var(--border);color:var(--text)}
+.toolbar .time{color:var(--muted);font-size:12px;margin-left:auto}
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--border)}
+.stat-card{background:var(--bg);border-radius:8px;padding:10px 14px;border:1px solid var(--border)}
+.stat-card .label{font-size:11px;color:var(--muted);margin-bottom:4px}
+.stat-card .value{font-size:24px;font-weight:bold;font-family:'JetBrains Mono',monospace}
+.stat-card .sub{font-size:11px;color:var(--muted);margin-top:2px}
+.stat-card .value.gold{color:var(--gold)}
+.stat-card .value.red{color:var(--up)}
+.stat-card .value.green{color:var(--down)}
+.stat-card .value.blue{color:var(--blue)}
+/* Main */
+.main{display:flex;flex:1;overflow:hidden}
+/* Table panel */
+.table-panel{width:42%;min-width:420px;display:flex;flex-direction:column;overflow:hidden;border-right:2px solid var(--border)}
+.table-scroll{flex:1;overflow-y:auto;overflow-x:auto}
+.table-scroll::-webkit-scrollbar{width:6px}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead{position:sticky;top:0;z-index:5}
+thead th{background:var(--card);padding:8px 10px;text-align:left;border-bottom:2px solid var(--border);color:var(--muted);font-weight:600;white-space:nowrap;cursor:pointer;user-select:none}
+thead th:hover{color:var(--gold)}
+tbody tr{border-bottom:1px solid rgba(51,65,85,.5);cursor:pointer;transition:background .12s}
+tbody tr:hover{background:var(--card)}
+tbody tr.active{background:var(--card);border-left:3px solid var(--gold)}
+tbody td{padding:7px 10px;white-space:nowrap}
+.code{font-family:'JetBrains Mono',monospace;color:#38bdf8;font-size:13px;font-weight:600}
+.up{color:var(--up)}
+.down{color:var(--down)}
+.score-badge{display:inline-block;padding:2px 7px;border-radius:8px;font-weight:bold;font-size:11px;font-family:'JetBrains Mono',monospace}
+.score-95{background:rgba(255,77,79,.2);color:var(--up)}
+.score-90{background:rgba(251,191,36,.2);color:var(--gold)}
+.score-80{background:rgba(251,191,36,.15);color:#f59e0b}
+.score-70{background:rgba(56,189,248,.15);color:var(--blue)}
+.score-60{background:rgba(148,163,184,.15);color:var(--muted)}
+/* Drawer */
+.drawer{width:58%;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.drawer-header{background:var(--card);padding:12px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.drawer-header .stock-name{font-size:20px;font-weight:bold}
+.drawer-header .stock-info{font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+.drawer-header .actions{display:flex;gap:6px}
+.drawer-header .actions button{background:var(--border);color:var(--text);border:none;padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer}
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--card);overflow-x:auto}
+.tabs button{background:none;border:none;color:var(--muted);padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;white-space:nowrap;transition:.2s}
+.tabs button:hover{color:var(--text)}
+.tabs button.active{color:var(--gold);border-bottom:2px solid var(--gold)}
+.tab-content{flex:1;overflow-y:auto;padding:16px 20px}
+.tab-content::-webkit-scrollbar{width:6px}
+.tab-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+/* Timeline */
+.timeline-item{background:var(--card);border-radius:8px;padding:14px;margin-bottom:10px;border:1px solid var(--border);cursor:pointer;transition:.15s}
+.timeline-item:hover{border-color:var(--gold)}
+.timeline-item .t-date{color:var(--gold);font-weight:bold;margin-bottom:6px;font-size:14px}
+.timeline-item .t-meta{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;font-size:12px}
+.timeline-item .t-meta span{color:var(--muted)}
+.timeline-item .t-meta strong{color:var(--text)}
+.timeline-item .t-reason{margin-top:8px;display:flex;gap:5px;flex-wrap:wrap}
+.timeline-item .t-reason .tag{background:rgba(251,191,36,.15);color:var(--gold);padding:2px 8px;border-radius:4px;font-size:11px}
+.timeline-detail{background:var(--bg);border-radius:6px;padding:12px;margin-top:10px;display:none;border:1px solid var(--border)}
+.timeline-detail.show{display:block}
+/* Grid cards */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.info-card{background:var(--card);border-radius:8px;padding:12px;border:1px solid var(--border)}
+.info-card .ic-label{font-size:11px;color:var(--muted);margin-bottom:4px}
+.info-card .ic-value{font-size:18px;font-weight:bold;font-family:'JetBrains Mono',monospace}
+/* Chart container */
+.chart-box{width:100%;height:320px;margin-bottom:16px}
+/* News list */
+.news-item{padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.news-item .n-time{color:#38bdf8;font-size:13px;font-weight:600;margin-right:8px}
+.news-item .n-source{color:#38bdf8;font-size:13px;font-weight:600}
+.news-item .sentiment{padding:1px 6px;border-radius:3px;font-size:10px;font-weight:bold;margin-left:6px}
+.sentiment-bullish{background:rgba(255,77,79,.15);color:var(--up)}
+.sentiment-neutral{background:rgba(148,163,184,.15);color:var(--muted)}
+.sentiment-bearish{background:rgba(0,200,83,.15);color:var(--down)}
+/* AI analysis */
+.ai-block{background:var(--card);border-radius:10px;padding:18px;border:1px solid var(--border);margin-bottom:12px}
+.ai-block h4{color:var(--gold);margin-bottom:10px;font-size:15px}
+.ai-block .ai-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(51,65,85,.3);font-size:13px}
+.ai-block .ai-row span:first-child{color:var(--muted)}
+.ai-conclusion{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:14px;margin-top:12px;font-size:13px;line-height:1.7}
+.ai-stars{color:var(--gold);font-size:20px;letter-spacing:2px}
+/* Empty state */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted)}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+/* Loading */
+.skeleton{background:linear-gradient(90deg,var(--card) 25%,var(--border) 50%,var(--card) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px;height:16px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Longhu table */
+.lh-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.lh-table td{padding:5px 8px;border-bottom:1px solid var(--border)}
+.lh-table .lh-seat{color:var(--blue)}
+.lh-table .lh-amount{font-family:'JetBrains Mono',monospace;text-align:right}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="logo">📈 涨停排行榜 PRO</div>
+    <input type="text" v-model="searchQuery" @input="searchStocks" placeholder="搜索代码/名称/拼音...">
+    <select v-model="dateRange">
+      <option value="7">近7日</option>
+      <option value="15">近15日</option>
+      <option value="30" selected>近30日</option>
+      <option value="60">近60日</option>
+    </select>
+    <select v-model="market">
+      <option value="全部">全部</option>
+      <option value="沪市">沪市</option>
+      <option value="深市">深市</option>
+      <option value="创业板">创业板</option>
+      <option value="科创板">科创板</option>
+    </select>
+    <button @click="refreshData">🔄 刷新</button>
+    <button class="muted-btn" @click="exportExcel">📥 导出</button>
+    <span class="time">{{ updateTime }}</span>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card" v-for="s in statsCards" :key="s.label">
+      <div class="label">{{ s.label }}</div>
+      <div class="value" :class="s.color">{{ s.value }}</div>
+      <div class="sub">{{ s.sub }}</div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <!-- Left: Table -->
+    <div class="table-panel">
+      <div class="table-scroll" @scroll="onTableScroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px" @click="sortBy('排名')">#</th>
+              <th style="width:70px" @click="sortBy('代码')">代码</th>
+              <th @click="sortBy('名称')">名称</th>
+              <th style="width:60px" @click="sortBy('现价')">现价</th>
+              <th style="width:60px" @click="sortBy('涨跌幅')">涨跌</th>
+              <th style="width:60px" @click="sortBy('涨停次数')">涨停</th>
+              <th style="width:55px" @click="sortBy('封板率')">封板率</th>
+              <th style="width:70px" @click="sortBy('AI评分')">AI评分</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(s, idx) in displayStocks" :key="s.代码"
+                :class="{ active: selectedCode === s.代码 }"
+                @click="selectStock(s)">
+              <td style="color:var(--muted)">{{ idx + 1 + (currentPage-1)*pageSize }}</td>
+              <td class="code">{{ s.代码 }}</td>
+              <td><strong>{{ s.名称 }}</strong><br><span style="font-size:10px;color:var(--muted)">{{ s.行业 }}</span></td>
+              <td style="font-family:monospace">{{ s.现价 }}</td>
+              <td :class="s.涨跌幅 >= 0 ? 'up' : 'down'">{{ s.涨跌幅 >= 0 ? '+' : '' }}{{ s.涨跌幅 }}%</td>
+              <td><span style="background:var(--gold);color:var(--bg);padding:2px 7px;border-radius:8px;font-weight:bold;font-size:12px">{{ s.涨停次数 }}</span></td>
+              <td>{{ s.封板率 }}%</td>
+              <td>
+                <span :class="scoreClass(s.AI评分)">{{ s.AI评分 }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="displayStocks.length === 0" style="text-align:center;padding:40px;color:var(--muted)">无匹配结果</div>
+      </div>
+    </div>
+
+    <!-- Right: Drawer -->
+    <div class="drawer">
+      <template v-if="selectedStock">
+        <div class="drawer-header">
+          <div>
+            <div class="stock-name">{{ selectedStock.名称 }} <span class="code">{{ selectedStock.代码 }}</span></div>
+            <div class="stock-info">
+              <span :class="selectedStock.涨跌幅 >= 0 ? 'up' : 'down'">¥{{ selectedStock.现价 }} {{ selectedStock.涨跌幅 >= 0 ? '+' : '' }}{{ selectedStock.涨跌幅 }}%</span>
+              <span>{{ selectedStock.行业 }}</span>
+              <span>市值 {{ selectedStock.总市值 }}亿</span>
+              <span>PE {{ selectedStock.市盈率 }}</span>
+            </div>
+          </div>
+          <div class="actions">
+            <span :class="scoreClass(selectedStock.AI评分)" style="font-size:18px;font-weight:bold;padding:4px 10px;border-radius:6px">{{ selectedStock.AI评分 }}</span>
+            <button @click="copyCode">📋</button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+          <button v-for="t in tabs" :key="t.id" :class="{ active: activeTab === t.id }" @click="activeTab = t.id">{{ t.name }}</button>
+        </div>
+
+        <div class="tab-content">
+          <!-- Tab: 涨停记录 -->
+          <div v-if="activeTab === 'records'">
+            <div v-if="detailLoading" style="color:var(--muted);text-align:center;padding:40px">加载中...</div>
+            <template v-else>
+              <div v-if="!detailData.涨停明细 || detailData.涨停明细.length === 0" class="empty-state">
+                <div class="icon">📭</div><div>近30日无涨停记录</div>
+              </div>
+              <div v-for="(r, i) in (detailData.涨停明细 || [])" :key="i" class="timeline-item" @click="toggleTimeline(i)">
+                <div class="t-date">📅 {{ formatDate(r.日期) }} · 第{{ r.第几板 }}板</div>
+                <div class="t-meta">
+                  <span>涨停价 <strong class="up">¥{{ r.涨停价 }}</strong></span>
+                  <span>封板 <strong>{{ r.封板时间 }}</strong></span>
+                  <span>封单 <strong>{{ r.封单金额 }}亿</strong></span>
+                  <span>成交 <strong>{{ r.成交额 }}亿</strong></span>
+                  <span>换手 <strong>{{ r.换手率 }}%</strong></span>
+                  <span>炸板 <strong :class="r.炸板 ? 'up' : 'down'">{{ r.炸板 ? '是(' + r.开板次数 + '次)' : '否' }}</strong></span>
+                  <span>龙虎榜 <strong>{{ r.龙虎榜 ? '✅' : '-' }}</strong></span>
+                  <span>主力 <strong :class="r.主力净流入 >= 0 ? 'up' : 'down'">{{ r.主力净流入 }}亿</strong></span>
+                </div>
+                <div class="t-reason">
+                  <span class="tag" v-for="c in r.涨停原因" :key="c">{{ c }}</span>
+                </div>
+                <div :class="['timeline-detail', { show: expandedTimeline === i }]">
+                  <div style="font-size:12px;color:var(--muted);line-height:1.8">
+                    <div>开板时间: {{ r.开板时间 }}</div>
+                    <div>开板次数: {{ r.开板次数 }}</div>
+                    <div>振幅: {{ r.振幅 }}%</div>
+                    <div>北向资金: {{ r.北向资金 }}亿</div>
+                    <div style="margin-top:6px;color:var(--text)">{{ r.新闻摘要 }}</div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Tab: 涨停统计 -->
+          <div v-if="activeTab === 'stats'">
+            <div class="card-grid">
+              <div class="info-card" v-for="item in ztStats" :key="item.label">
+                <div class="ic-label">{{ item.label }}</div>
+                <div class="ic-value" :class="item.color">{{ item.value }}</div>
+              </div>
+            </div>
+            <div class="chart-box" id="chart-zt-stats" style="margin-top:16px"></div>
+          </div>
+
+          <!-- Tab: 资金分析 -->
+          <div v-if="activeTab === 'funds'">
+            <div class="chart-box" id="chart-funds"></div>
+          </div>
+
+          <!-- Tab: AI分析 -->
+          <div v-if="activeTab === 'ai' && detailData.AI分析">
+            <div class="ai-block">
+              <h4>🤖 AI 综合分析</h4>
+              <div class="ai-row"><span>综合评分</span><span class="ai-stars">{{ detailData.AI分析.星级 }} {{ detailData.AI分析.评分 }}</span></div>
+              <div class="ai-row"><span>市场角色</span><span style="color:var(--gold);font-weight:bold">{{ detailData.AI分析.角色 }}</span></div>
+              <div class="ai-row"><span>涨停原因</span><span>{{ detailData.AI分析.为什么涨停 }}</span></div>
+              <div class="ai-row"><span>资金逻辑</span><span>{{ detailData.AI分析.资金逻辑 }}</span></div>
+              <div class="ai-row"><span>是否龙头</span><span :class="detailData.AI分析.是否龙头 ? 'up' : ''">{{ detailData.AI分析.是否龙头 ? '✅ 是' : '否' }}</span></div>
+              <div class="ai-row"><span>风险等级</span><span :class="detailData.AI分析.风险等级 === '低' ? 'down' : detailData.AI分析.风险等级 === '高' ? 'up' : ''">{{ detailData.AI分析.风险等级 }}</span></div>
+              <div class="ai-row"><span>止盈价</span><span class="up">¥{{ detailData.AI分析.止盈价 }}</span></div>
+              <div class="ai-row"><span>止损价</span><span class="down">¥{{ detailData.AI分析.止损价 }}</span></div>
+              <div class="ai-row"><span>高开概率</span><span>{{ detailData.AI分析.高开概率 }}%</span></div>
+              <div class="ai-row"><span>连板概率</span><span>{{ detailData.AI分析.连板概率 }}%</span></div>
+              <div class="ai-conclusion">
+                <strong>📝 AI 结论：</strong><br>{{ detailData.AI分析.综合总结 }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: 龙虎榜 -->
+          <div v-if="activeTab === 'longhu' && detailData.龙虎榜">
+            <div class="card-grid">
+              <div class="info-card"><div class="ic-label">上榜次数</div><div class="ic-value gold">{{ detailData.龙虎榜.上榜次数 }}</div></div>
+              <div class="info-card"><div class="ic-label">机构净买入</div><div class="ic-value" :class="detailData.龙虎榜.机构净买入 >= 0 ? 'up' : 'down'">{{ detailData.龙虎榜.机构净买入 }}亿</div></div>
+              <div class="info-card"><div class="ic-label">游资净买入</div><div class="ic-value" :class="detailData.龙虎榜.游资净买入 >= 0 ? 'up' : 'down'">{{ detailData.龙虎榜.游资净买入 }}亿</div></div>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:12px">
+              <div style="flex:1">
+                <h4 style="color:var(--gold);margin-bottom:8px">买入前五</h4>
+                <table class="lh-table">
+                  <tr v-for="b in detailData.龙虎榜.买入前五" :key="b.席位">
+                    <td class="lh-seat">{{ b.席位 }}</td>
+                    <td class="lh-amount up">+{{ b.金额 }}亿</td>
+                  </tr>
+                </table>
+              </div>
+              <div style="flex:1">
+                <h4 style="color:var(--up);margin-bottom:8px">卖出前五</h4>
+                <table class="lh-table">
+                  <tr v-for="b in detailData.龙虎榜.卖出前五" :key="b.席位">
+                    <td class="lh-seat">{{ b.席位 }}</td>
+                    <td class="lh-amount down">-{{ b.金额 }}亿</td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: K线 -->
+          <div v-if="activeTab === 'kline'">
+            <div class="chart-box" id="chart-kline" style="height:420px"></div>
+          </div>
+
+          <!-- Tab: 新闻 -->
+          <div v-if="activeTab === 'news'">
+            <div v-for="(n, i) in (detailData.新闻 || [])" :key="i" class="news-item">
+              <span class="n-time">{{ n.时间 }}</span>
+              <span :class="'sentiment sentiment-' + (n.情绪 === '利好' ? 'bullish' : n.情绪 === '利空' ? 'bearish' : 'neutral')">{{ n.情绪 }}</span>
+              <span class="n-source"> {{ n.来源 }}</span>
+              <div style="margin-top:2px;font-weight:500">{{ n.标题 }}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ n.摘要 }}</div>
+            </div>
+          </div>
+
+          <!-- Tab: 相似股票 -->
+          <div v-if="activeTab === 'similar' && detailData.相似股票">
+            <div v-for="(s, i) in detailData.相似股票" :key="i" class="info-card" style="margin-bottom:8px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <strong>{{ s.名称 }}</strong>
+                <span style="color:var(--gold)">相似度 {{ s.相似度 }}%</span>
+                <span class="up">{{ s.表现 }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div class="empty-state">
+          <div class="icon">👆</div>
+          <div>点击左侧股票查看详情</div>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, watch, nextTick, onMounted } = Vue;
+
+createApp({
+  setup() {
+    const searchQuery = ref('');
+    const dateRange = ref('30');
+    const market = ref('全部');
+    const allStocks = ref([]);
+    const displayStocks = ref([]);
+    const currentPage = ref(1);
+    const pageSize = ref(50);
+    const sortField = ref('涨停次数');
+    const sortOrder = ref('desc');
+    const updateTime = ref('--');
+    const statsCards = ref([
+      { label: '涨停股票', value: '--', sub: '', color: 'gold' },
+      { label: '涨停总次数', value: '--', sub: '', color: 'red' },
+      { label: '平均封板率', value: '--', sub: '', color: 'green' },
+      { label: 'AI推荐', value: '--', sub: '', color: 'blue' },
+    ]);
+
+    // Selection
+    const selectedCode = ref(null);
+    const selectedStock = ref(null);
+    const detailData = ref({});
+    const detailLoading = ref(false);
+    const activeTab = ref('records');
+    const expandedTimeline = ref(null);
+
+    const tabs = [
+      { id: 'records', name: '📋 涨停记录' },
+      { id: 'stats', name: '📊 涨停统计' },
+      { id: 'funds', name: '💰 资金分析' },
+      { id: 'ai', name: '🤖 AI分析' },
+      { id: 'longhu', name: '🐉 龙虎榜' },
+      { id: 'kline', name: '📈 K线走势' },
+      { id: 'news', name: '📰 新闻' },
+      { id: 'similar', name: '🔗 相似股票' },
+    ];
+
+    const ztStats = computed(() => {
+      if (!detailData.value.涨停统计) return [];
+      const s = detailData.value.涨停统计;
+      return [
+        { label: '首板', value: s.首板, color: 'gold' },
+        { label: '二板', value: s.二板, color: '' },
+        { label: '三板', value: s.三板, color: '' },
+        { label: '四板+', value: s.四板 + s.五板以上, color: 'red' },
+        { label: '炸板', value: s.炸板, color: 'down' },
+        { label: '封板率', value: s.封板率 + '%', color: 'green' },
+      ];
+    });
+
+    function scoreClass(score) {
+      if (score >= 95) return 'score-badge score-95';
+      if (score >= 90) return 'score-badge score-90';
+      if (score >= 80) return 'score-badge score-80';
+      if (score >= 70) return 'score-badge score-70';
+      return 'score-badge score-60';
+    }
+
+    function formatDate(d) {
+      if (!d) return '';
+      return d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8);
+    }
+
+    async function loadStats() {
+      try {
+        const r = await fetch('/api/stats'), j = await r.json();
+        statsCards.value = [
+          { label: '涨停股票', value: j.涨停股票数, sub: `共${j.涨停总次数}次`, color: 'gold' },
+          { label: '涨停总次数', value: j.涨停总次数, sub: '', color: 'red' },
+          { label: '平均封板率', value: j.平均封板率 + '%', sub: '炸板' + j.平均炸板率 + '%', color: 'green' },
+          { label: 'AI推荐', value: j.AI推荐数, sub: '评分≥80', color: 'blue' },
+        ];
+        updateTime.value = new Date().toLocaleString('zh-CN');
+      } catch(e) { console.error(e); }
+    }
+
+    async function loadStocks() {
+      try {
+        const params = new URLSearchParams({
+          sort_by: sortField.value,
+          order: sortOrder.value,
+          search: searchQuery.value,
+          market: market.value,
+          page: currentPage.value,
+          page_size: pageSize.value,
+        });
+        const r = await fetch('/api/stocks?' + params), j = await r.json();
+        displayStocks.value = j.数据;
+      } catch(e) { console.error(e); }
+    }
+
+    async function selectStock(stock) {
+      selectedCode.value = stock.代码;
+      selectedStock.value = stock;
+      activeTab.value = 'records';
+      detailLoading.value = true;
+      detailData.value = {};
+      expandedTimeline.value = null;
+
+      try {
+        const r = await fetch('/api/stock/' + stock.代码), j = await r.json();
+        detailData.value = j;
+        detailLoading.value = false;
+        await nextTick();
+        renderCharts();
+      } catch(e) {
+        detailLoading.value = false;
+        console.error(e);
+      }
+    }
+
+    function toggleTimeline(i) {
+      expandedTimeline.value = expandedTimeline.value === i ? null : i;
+    }
+
+    function searchStocks() { currentPage.value = 1; loadStocks(); }
+    function sortBy(field) { sortField.value = field; sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'; loadStocks(); }
+    function refreshData() { loadStats(); loadStocks(); }
+    function exportExcel() { alert('导出功能开发中...'); }
+    function copyCode() { navigator.clipboard?.writeText(selectedStock.value?.代码 || ''); }
+    function onTableScroll() {}
+
+    // Charts
+    function renderCharts() {
+      nextTick(() => {
+        renderZTStatsChart();
+        renderFundsChart();
+        renderKlineChart();
+      });
+    }
+
+    function renderZTStatsChart() {
+      const el = document.getElementById('chart-zt-stats');
+      if (!el || !detailData.value.涨停统计) return;
+      const s = detailData.value.涨停统计;
+      const chart = echarts.init(el);
+      chart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 40, right: 20, top: 20, bottom: 30 },
+        xAxis: { type: 'category', data: ['首板','二板','三板','四板','五板+','炸板'], axisLabel: { color: '#94a3b8', fontSize: 11 } },
+        yAxis: { type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: '#1e293b' } } },
+        series: [{
+          type: 'bar', data: [s.首板, s.二板, s.三板, s.四板, s.五板以上, s.炸板],
+          itemStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[
+            { offset: 0, color: '#fbbf24' }, { offset: 1, color: '#d97706' }
+          ]), borderRadius: [4,4,0,0] },
+          barWidth: 32,
+        }]
+      });
+      chart.resize();
+    }
+
+    function renderFundsChart() {
+      const el = document.getElementById('chart-funds');
+      if (!el || !detailData.value.资金流) return;
+      const data = detailData.value.资金流;
+      const chart = echarts.init(el);
+      chart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { textStyle: { color: '#94a3b8', fontSize: 11 }, top: 0 },
+        grid: { left: 50, right: 20, top: 40, bottom: 30 },
+        xAxis: { type: 'category', data: data.map(d => d.日期), axisLabel: { color: '#94a3b8', fontSize: 10 } },
+        yAxis: { type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: '#1e293b' } } },
+        series: [
+          { name: '主力', type: 'line', data: data.map(d => d.主力), smooth: true, lineStyle: { color: '#ff4d4f', width: 2 }, symbol: 'none' },
+          { name: '超大单', type: 'line', data: data.map(d => d.超大单), smooth: true, lineStyle: { color: '#f97316', width: 1.5 }, symbol: 'none' },
+          { name: '大单', type: 'line', data: data.map(d => d.大单), smooth: true, lineStyle: { color: '#fbbf24', width: 1 }, symbol: 'none' },
+          { name: '北向', type: 'line', data: data.map(d => d.北向), smooth: true, lineStyle: { color: '#38bdf8', width: 2 }, symbol: 'none' },
+        ]
+      });
+      chart.resize();
+    }
+
+    function renderKlineChart() {
+      const el = document.getElementById('chart-kline');
+      if (!el || !detailData.value.K线) return;
+      const raw = detailData.value.K线;
+      const dates = raw.map(r => r[0].slice(4));
+      const ohlc = raw.map(r => [r[1], r[2], r[3], r[4]]);
+      const vols = raw.map(r => r[5]);
+      const chart = echarts.init(el);
+      chart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: [{ left: 60, right: 20, top: 20, height: '60%' }, { left: 60, right: 20, top: '75%', height: '15%' }],
+        xAxis: [{ type: 'category', data: dates, axisLabel: { color: '#94a3b8', fontSize: 9 }, gridIndex: 0 },
+                 { type: 'category', data: dates, axisLabel: { show: false }, gridIndex: 1 }],
+        yAxis: [{ type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: '#1e293b' } }, gridIndex: 0 },
+                { type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { show: false }, gridIndex: 1 }],
+        series: [{
+          type: 'candlestick', data: ohlc,
+          itemStyle: { color: '#ff4d4f', color0: '#00c853', borderColor: '#ff4d4f', borderColor0: '#00c853' },
+          xAxisIndex: 0, yAxisIndex: 0,
+        }, {
+          type: 'bar', data: vols.map((v,i) => ohlc[i][1] > ohlc[i][0] ? v : -v),
+          itemStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[
+            { offset: 0, color: ohlc[ohlc.length-1][1] > ohlc[ohlc.length-1][0] ? '#ff4d4f' : '#00c853' },
+            { offset: 1, color: '#1e293b' }
+          ]) },
+          xAxisIndex: 1, yAxisIndex: 1,
+        }]
+      });
+      chart.resize();
+    }
+
+    // Watch tab changes to render charts
+    watch(activeTab, (tab) => {
+      nextTick(() => {
+        if (tab === 'stats') renderZTStatsChart();
+        else if (tab === 'funds') renderFundsChart();
+        else if (tab === 'kline') renderKlineChart();
+      });
+    });
+
+    onMounted(() => {
+      loadStats();
+      loadStocks();
+    });
+
+    return {
+      searchQuery, dateRange, market, updateTime, statsCards,
+      displayStocks, currentPage, pageSize, sortField, sortOrder,
+      selectedCode, selectedStock, detailData, detailLoading,
+      activeTab, tabs, expandedTimeline, ztStats,
+      scoreClass, formatDate,
+      selectStock, toggleTimeline, searchStocks, sortBy, refreshData,
+      exportExcel, copyCode, onTableScroll,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
