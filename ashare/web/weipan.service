@@ -1,0 +1,17 @@
+[Unit]
+Description=Weipan Screener Web (杨永兴尾盘打法看板)
+After=network.target
+
+[Service]
+Type=simple
+User=ai
+WorkingDirectory=/home/ai/ashare/web
+Environment=PORT=8140
+Environment=TZ=Asia/Shanghai
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

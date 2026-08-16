@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.log
+web/rank_cache.json
+alert/alerts.json
+alert/state.json
+alert/watch.json
+alert/sold.json
+alert/prompted.json
